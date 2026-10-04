@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: banking-frontend
+  namespace: banking
+  labels:
+    app: banking-frontend
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: banking-frontend
+
+  template:
+    metadata:
+      labels:
+        app: banking-frontend
+
+    spec:
+      enableServiceLinks: false
+
+      containers:
+        - name: frontend
+          image: shegoj/techbleat-global-bank-frontend:1.0
+          imagePullPolicy: Always
+
+          ports:
+            - name: http
+              containerPort: 80
+
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+
+            limits:
+              cpu: 150m
+              memory: 128Mi
+
+          readinessProbe:
+            httpGet:
+              path: /frontend-health
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          livenessProbe:
+            httpGet:
+              path: /frontend-health
+              port: 80
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: banking-frontend
+  namespace: banking
+spec:
+  type: ClusterIP
+
+  selector:
+    app: banking-frontend
+
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
