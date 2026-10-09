@@ -34,7 +34,12 @@ cd techbleat-global-bank-backend
 docker compose up --build
 ```
 
-The frontend is served at `http://localhost:3000`. Before using registration, configure `KEYCLOAK_ADMIN_CLIENT_SECRET` in an untracked `.env` file beside the backend `docker-compose.yml`. The Keycloak URL defaults to `http://host.docker.internal:8080` for Docker Desktop.
+The frontend is served at `http://localhost:3000`. Before starting Compose, configure `POSTGRES_PASSWORD` in an untracked `techbleat-global-bank-backend/.env` file; Compose uses it for PostgreSQL and all database-backed services. Keep it the same as the password already configured in an existing local database volume. Before using registration, also configure `KEYCLOAK_ADMIN_CLIENT_SECRET` in that file. The Keycloak URL defaults to `http://host.docker.internal:8080` for Docker Desktop. For example, add these entries to the file:
+
+```dotenv
+POSTGRES_PASSWORD=your-local-database-password
+KEYCLOAK_ADMIN_CLIENT_SECRET=your-keycloak-client-secret
+```
 
 The FinanceAgent is served at `http://localhost:9001`; signed-in customers with the `banking-ai-agent` role can open it from the **AI Assistant** button in the frontend. The frontend proxies agent requests through its web origin. To enable chat, copy `finance-agent/.env.example` to `finance-agent/.env` and set `OPENAI_API_KEY`; the agent container loads that file when present. The file is excluded from the container image. Configure the Keycloak audience for authenticated agent requests, as described in the agent README.
 
