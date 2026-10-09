@@ -21,7 +21,7 @@ The customer experience uses a deep slate background, cyan highlights, restraine
 
 ## Prerequisites
 
-- Docker with Docker Compose v2
+- Docker with Docker Compose v2.24 or newer
 - Node.js 18 or newer if running the frontend outside Docker
 - Keycloak running in the `banking` realm
 
@@ -36,11 +36,14 @@ docker compose up --build
 
 The frontend is served at `http://localhost:3000`. Before using registration, configure `KEYCLOAK_ADMIN_CLIENT_SECRET` in an untracked `.env` file beside the backend `docker-compose.yml`. The Keycloak URL defaults to `http://host.docker.internal:8080` for Docker Desktop.
 
+The FinanceAgent is served at `http://localhost:9001`; signed-in customers with the `banking-ai-agent` role can open it from the **AI Assistant** button in the frontend. The frontend proxies agent requests through its web origin. To enable chat, copy `finance-agent/.env.example` to `finance-agent/.env` and set `OPENAI_API_KEY`; the agent container loads that file when present. The file is excluded from the container image. Configure the Keycloak audience for authenticated agent requests, as described in the agent README.
+
 Check service health at:
 
 - User service: `http://localhost:8000/health`
 - Transaction service: `http://localhost:8090/health`
 - Activity service: `http://localhost:8001/health`
+- FinanceAgent: `http://localhost:9001/health`
 
 ## Run the Frontend Separately
 
@@ -63,7 +66,7 @@ Use the `banking` realm and configure these clients:
 
 The app registration form collects a user ID, name, email, and password. The user service provisions the Keycloak identity, bank profile, and zero-balance account. The initial password is temporary, so Keycloak requires a password change at first sign-in. The app currently accepts passwords of at least three characters; Keycloak realm password policy may impose additional requirements.
 
-An administrator must assign `banking-customer` after registration before the user can access banking. `banking-transact` additionally enables deposits, withdrawals, and transfers. The frontend accepts these as realm roles or as roles assigned to the `banking-frontend` client.
+An administrator must assign `banking-customer` after registration before the user can access banking. `banking-transact` additionally enables deposits, withdrawals, and transfers. Assign `banking-ai-agent` to users who should see and use the AI Assistant. The frontend accepts these as realm roles or as roles assigned to the `banking-frontend` client. This AI role currently gates the frontend UI only; the FinanceAgent API still relies on token validation and has no role check.
 
 ## API Overview
 

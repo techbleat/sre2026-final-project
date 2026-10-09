@@ -84,6 +84,24 @@ services:
     ports:
       - "8001:8001"
 
+  finance-agent:
+    build:
+      context: ../finance-agent
+    container_name: finance-agent
+    env_file:
+      - path: ../finance-agent/.env
+        required: false
+    environment:
+      KEYCLOAK_URL: ${KEYCLOAK_URL:-http://host.docker.internal:8080}
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-http://localhost:8080/realms/banking}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-banking}
+      KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE:-account}
+      TRANSACTION_API_URL: http://transaction-service:8080
+    depends_on:
+      - transaction-service
+    ports:
+      - "9001:9001"
+
   frontend:
     build:
       context: ../techbleat-global-bank-frontend

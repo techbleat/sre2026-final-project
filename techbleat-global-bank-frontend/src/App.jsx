@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAccessToken, getIdentity, hasRole, initializeAuth, login, logout } from "./auth";
 
 const USER_API = "/user-api";
 const TX_API = "/transaction-api";
 const ACTIVITY_API = "/activity-api";
+const FINANCE_AGENT_API = "/finance-agent-api";
 
 const currency = new Intl.NumberFormat("en-GB", {
   style: "currency",
@@ -23,6 +24,15 @@ export default function TechbleatGlobalBankCustomerApp() {
   const [loading, setLoading] = useState(false);
   const [registering, setRegistering] = useState(false);
   const [message, setMessage] = useState({ type: "info", text: "" });
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantInput, setAssistantInput] = useState("");
+  const [assistantMessages, setAssistantMessages] = useState([
+    {
+      role: "assistant",
+      content: "Hello! I’m your banking assistant. Ask me about your balance or recent transactions.",
+    },
+  ]);
+  const [assistantLoading, setAssistantLoading] = useState(false);
 
   const [registerForm, setRegisterForm] = useState({
     id: "",
@@ -47,6 +57,7 @@ export default function TechbleatGlobalBankCustomerApp() {
   const identity = authenticated ? getIdentity() : null;
   const canViewBanking = authenticated && hasRole(import.meta.env.VITE_BANKING_VIEW_ROLE || "banking-customer");
   const canTransact = canViewBanking && hasRole(import.meta.env.VITE_BANKING_TRANSACTION_ROLE || "banking-transact");
+  const canUseAssistant = canViewBanking && hasRole(import.meta.env.VITE_BANKING_AI_AGENT_ROLE || "banking-ai-agent");
 
   const spendingThisMonth = useMemo(() => {
     return transactions
@@ -64,6 +75,7 @@ export default function TechbleatGlobalBankCustomerApp() {
   }, [transactions]);
 
   const safeToSpend = Math.max(balance - 500, 0);
+  const closeAssistant = useCallback(() => setAssistantOpen(false), []);
 
   useEffect(() => {
     initializeAuth()
@@ -84,6 +96,13 @@ export default function TechbleatGlobalBankCustomerApp() {
   useEffect(() => {
     if (selectedUserId) {
       void loadDashboard(selectedUserId);
+      setAssistantOpen(false);
+      setAssistantMessages([
+        {
+          role: "assistant",
+          content: "Hello! I’m your banking assistant. Ask me about your balance or recent transactions.",
+        },
+      ]);
     }
   }, [selectedUserId]);
 
@@ -114,6 +133,45 @@ export default function TechbleatGlobalBankCustomerApp() {
       return response.json();
     }
     return response.text();
+  }
+
+  async function sendAssistantMessage(event) {
+    event.preventDefault();
+    const prompt = assistantInput.trim();
+    if (!prompt || assistantLoading) return;
+
+    setAssistantInput("");
+    setAssistantMessages((current) => [...current, { role: "user", content: prompt }]);
+    setAssistantLoading(true);
+
+    try {
+      const accessToken = await getAccessToken();
+      const response = await fetch(`${FINANCE_AGENT_API}/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ message: prompt }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.detail || data.message || "The assistant could not answer. Please try again.");
+      }
+      if (typeof data.answer !== "string" || !data.answer.trim()) {
+        throw new Error("The assistant returned an empty response. Please try again.");
+      }
+
+      setAssistantMessages((current) => [...current, { role: "assistant", content: data.answer }]);
+    } catch (error) {
+      setAssistantMessages((current) => [
+        ...current,
+        { role: "error", content: error.message || "Unable to reach the assistant. Please try again." },
+      ]);
+    } finally {
+      setAssistantLoading(false);
+    }
   }
 
   async function loadUsers() {
@@ -261,6 +319,13 @@ export default function TechbleatGlobalBankCustomerApp() {
   }
 
   function handleLogout() {
+    setAssistantOpen(false);
+    setAssistantMessages([
+      {
+        role: "assistant",
+        content: "Hello! I’m your banking assistant. Ask me about your balance or recent transactions.",
+      },
+    ]);
     void logout();
   }
 
@@ -295,6 +360,8 @@ export default function TechbleatGlobalBankCustomerApp() {
           selectedUser={selectedUser}
           identityName={identity?.preferred_username || identity?.email}
           canTransact={canTransact}
+          canUseAssistant={canUseAssistant}
+          onOpenAssistant={() => setAssistantOpen(true)}
           onLogout={handleLogout}
         />
 
@@ -383,12 +450,23 @@ export default function TechbleatGlobalBankCustomerApp() {
             safeToSpend={safeToSpend}
           />
         )}
+
+        {canUseAssistant && selectedUser && assistantOpen && (
+          <AssistantChat
+            messages={assistantMessages}
+            input={assistantInput}
+            setInput={setAssistantInput}
+            loading={assistantLoading}
+            onSubmit={sendAssistantMessage}
+            onClose={closeAssistant}
+          />
+        )}
       </div>
     </div>
   );
 }
 
-function TopNav({ screen, setScreen, selectedUser, identityName, canTransact, onLogout }) {
+function TopNav({ screen, setScreen, selectedUser, identityName, canTransact, canUseAssistant, onOpenAssistant, onLogout }) {
   const nav = selectedUser
     ? ["dashboard", ...(canTransact ? ["transfer"] : []), "report"]
     : [];
@@ -413,6 +491,15 @@ function TopNav({ screen, setScreen, selectedUser, identityName, canTransact, on
       </div>
 
       <div className="flex items-center gap-3">
+        {selectedUser && canUseAssistant ? (
+          <button
+            type="button"
+            onClick={onOpenAssistant}
+            className="rounded-2xl bg-gradient-to-r from-cyan-400 to-blue-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow-lg shadow-cyan-950/25 transition hover:from-cyan-300 hover:to-blue-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+          >
+            AI Assistant
+          </button>
+        ) : null}
         {identityName ? (
           <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-300">
             Signed in as <span className="font-semibold text-white">{selectedUser?.full_name || identityName}</span>
@@ -430,6 +517,170 @@ function TopNav({ screen, setScreen, selectedUser, identityName, canTransact, on
       </div>
     </div>
   );
+}
+
+function AssistantChat({ messages, input, setInput, loading, onSubmit, onClose }) {
+  const messageListRef = useRef(null);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    messageListRef.current?.scrollTo({ top: messageListRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages, loading]);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    function closeOnEscape(event) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/70 p-0 backdrop-blur-sm sm:items-center sm:p-5" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) onClose();
+    }}>
+      <section
+        aria-labelledby="assistant-title"
+        aria-modal="true"
+        className="flex h-[min(720px,92vh)] w-full max-w-xl flex-col overflow-hidden rounded-t-[28px] border border-white/10 bg-slate-900 shadow-2xl shadow-black/50 sm:rounded-[28px]"
+        role="dialog"
+      >
+        <header className="flex items-center justify-between border-b border-white/10 bg-gradient-to-r from-slate-900 via-slate-900 to-cyan-950/60 px-5 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-cyan-300/10 text-lg text-cyan-200" aria-hidden="true">✦</div>
+            <div>
+              <h2 id="assistant-title" className="font-semibold text-white">Banking AI Assistant</h2>
+              <p className="text-xs text-slate-400">Private to your signed-in account</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close AI Assistant"
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 text-slate-300 transition hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300"
+          >
+            ×
+          </button>
+        </header>
+
+        <div ref={messageListRef} className="flex-1 space-y-4 overflow-y-auto px-4 py-5 sm:px-5" aria-live="polite">
+          {messages.map((message, index) => (
+            <div key={`${message.role}-${index}`} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
+              <div className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-6 ${
+                message.role === "user"
+                  ? "rounded-br-md bg-cyan-400 text-slate-950"
+                  : message.role === "error"
+                    ? "rounded-bl-md border border-rose-400/20 bg-rose-500/10 text-rose-200"
+                    : "rounded-bl-md border border-white/10 bg-slate-800 text-slate-100"
+              }`}>
+                {message.role === "assistant"
+                  ? <FormattedAssistantAnswer content={message.content} />
+                  : <p className="whitespace-pre-wrap">{message.content}</p>}
+              </div>
+            </div>
+          ))}
+          {loading ? (
+            <div className="flex justify-start" role="status" aria-label="Assistant is responding">
+              <div className="rounded-2xl rounded-bl-md border border-white/10 bg-slate-800 px-4 py-3 text-sm text-slate-400">
+                Checking your banking information…
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <form onSubmit={onSubmit} className="border-t border-white/10 bg-slate-950/70 p-4 sm:p-5">
+          <label className="sr-only" htmlFor="assistant-message">Message the banking assistant</label>
+          <div className="flex items-end gap-2 rounded-2xl border border-white/10 bg-slate-900 p-2 focus-within:border-cyan-300/50">
+            <textarea
+              ref={inputRef}
+              id="assistant-message"
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  event.currentTarget.form?.requestSubmit();
+                }
+              }}
+              maxLength={2000}
+              rows={1}
+              placeholder="Ask about your balance or transactions…"
+              className="max-h-28 min-h-11 flex-1 resize-y bg-transparent px-3 py-2 text-sm text-white outline-none placeholder:text-slate-500"
+              disabled={loading}
+            />
+            <button
+              type="submit"
+              disabled={loading || !input.trim()}
+              className="min-h-11 rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-4 text-sm font-semibold text-slate-950 transition hover:from-cyan-300 hover:to-blue-400 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Send
+            </button>
+          </div>
+          <p className="mt-2 px-1 text-xs text-slate-500">For information only. The assistant cannot make payments or transfers.</p>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function FormattedAssistantAnswer({ content }) {
+  const lines = content.split(/\r?\n/);
+  const blocks = [];
+  let bullets = [];
+  let paragraph = [];
+
+  function flushParagraph() {
+    if (!paragraph.length) return;
+    blocks.push(<p key={`p-${blocks.length}`} className="mb-2 last:mb-0">{formatInline(paragraph.join(" "))}</p>);
+    paragraph = [];
+  }
+
+  function flushBullets() {
+    if (!bullets.length) return;
+    blocks.push(
+      <ul key={`ul-${blocks.length}`} className="mb-2 list-disc space-y-1 pl-5 last:mb-0">
+        {bullets.map((item, index) => <li key={index}>{formatInline(item)}</li>)}
+      </ul>,
+    );
+    bullets = [];
+  }
+
+  lines.forEach((rawLine) => {
+    const line = rawLine.trim();
+    if (!line) {
+      flushParagraph();
+      flushBullets();
+      return;
+    }
+    const bullet = line.match(/^(?:[-*•]|\d+[.)])\s+(.+)$/);
+    if (bullet) {
+      flushParagraph();
+      bullets.push(bullet[1]);
+      return;
+    }
+    flushBullets();
+    const heading = line.match(/^#{1,3}\s+(.+)$/);
+    if (heading) {
+      flushParagraph();
+      blocks.push(<h3 key={`h-${blocks.length}`} className="mb-2 font-semibold text-cyan-200">{formatInline(heading[1])}</h3>);
+      return;
+    }
+    paragraph.push(line);
+  });
+  flushParagraph();
+  flushBullets();
+
+  return <div>{blocks}</div>;
+}
+
+function formatInline(text) {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={index} className="font-semibold text-white">{part.slice(2, -2)}</strong>;
+    }
+    return part;
+  });
 }
 
 function Banner({ message }) {

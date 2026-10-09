@@ -25,6 +25,11 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/activity-api/, ''),
         },
+        '/finance-agent-api': {
+          target: env.VITE_FINANCE_AGENT_API_TARGET || 'http://localhost:9001',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/finance-agent-api/, ''),
+        },
       },
     },
   }
