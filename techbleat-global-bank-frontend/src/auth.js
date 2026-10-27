@@ -1,9 +1,15 @@
 import Keycloak from "keycloak-js";
 
-const clientId = import.meta.env.VITE_KEYCLOAK_CLIENT_ID || "banking-frontend";
+// config.js is loaded before the React application by index.html.
+const config = window.__BANKING_CONFIG__;
+if (!config?.keycloakUrl || !config?.keycloakRealm || !config?.keycloakClientId) {
+  throw new Error("Banking runtime configuration is missing or incomplete (config.js).");
+}
+
+const clientId = config.keycloakClientId;
 const keycloak = new Keycloak({
-  url: import.meta.env.VITE_KEYCLOAK_URL || "http://localhost:8080",
-  realm: import.meta.env.VITE_KEYCLOAK_REALM || "banking",
+  url: config.keycloakUrl,
+  realm: config.keycloakRealm,
   clientId,
 });
 

@@ -55,9 +55,9 @@ export default function TechbleatGlobalBankCustomerApp() {
     [users, selectedUserId],
   );
   const identity = authenticated ? getIdentity() : null;
-  const canViewBanking = authenticated && hasRole(import.meta.env.VITE_BANKING_VIEW_ROLE || "banking-customer");
-  const canTransact = canViewBanking && hasRole(import.meta.env.VITE_BANKING_TRANSACTION_ROLE || "banking-transact");
-  const canUseAssistant = canViewBanking && hasRole(import.meta.env.VITE_BANKING_AI_AGENT_ROLE || "banking-ai-agent");
+  const canViewBanking = authenticated && hasRole(window.__BANKING_CONFIG__.bankingViewRole || "banking-customer");
+  const canTransact = canViewBanking && hasRole(window.__BANKING_CONFIG__.bankingTransactionRole || "banking-transact");
+  const canUseAssistant = canViewBanking && hasRole(window.__BANKING_CONFIG__.bankingAiAgentRole || "banking-ai-agent");
 
   const spendingThisMonth = useMemo(() => {
     return transactions
@@ -390,7 +390,7 @@ export default function TechbleatGlobalBankCustomerApp() {
           <AccessDenied
             type="approval"
             identityName={identity?.preferred_username || identity?.email}
-            role={import.meta.env.VITE_BANKING_VIEW_ROLE || "banking-customer"}
+            role={window.__BANKING_CONFIG__.bankingViewRole || "banking-customer"}
             onLogout={handleLogout}
           />
         )}
